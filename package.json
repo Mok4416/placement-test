@@ -1,0 +1,25 @@
+{
+  "name": "ielts-placement-assessment",
+  "version": "1.0.0",
+  "description": "Interactive IELTS Placement Assessment with Certainty-Based Marking (CBM)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win"
+  },
+  "keywords": ["ielts", "placement-test", "cbm", "education"],
+  "author": "IELTS Academic Preparation",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^28.2.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.ielts.placement.app",
+    "productName": "IELTS Placement Test",
+    "win": {
+      "target": "nsis"
+    }
+  }
+}

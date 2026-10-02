@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CEFR Multi-Skill Placement Assessment (A1 - C2)</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1e3a8a">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col font-sans">
+
+  <!-- Global Header -->
+  <header class="app-header bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="brand-badge bg-blue-900 text-white px-3 py-1.5 rounded-lg font-bold text-sm tracking-wide flex items-center gap-2">
+          <span>CEFR</span>
+          <span class="bg-blue-700 text-xs px-1.5 py-0.5 rounded font-mono">A1-C2</span>
+        </div>
+        <h1 class="text-base sm:text-lg font-bold text-slate-800">English Diagnostic Assessment</h1>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button id="openAdminLoginBtn" class="text-xs text-slate-600 hover:text-blue-700 flex items-center gap-1.5 py-1.5 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 transition shadow-sm">
+          <svg class="w-3.5 h-3.5 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          <span class="font-semibold">Instructor Portal</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
+
+    <!-- 1. REGISTRATION VIEW -->
+    <section id="viewRegister" class="max-w-2xl mx-auto">
+      <div class="app-card p-6 sm:p-8 bg-white shadow-md rounded-2xl border border-slate-200">
+        <div class="text-center mb-6">
+          <span class="inline-block bg-blue-50 text-blue-800 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider mb-2">4-Skills Language Evaluation</span>
+          <h2 class="text-2xl font-extrabold text-slate-900">CEFR English Placement Assessment</h2>
+          <p class="text-sm text-slate-600 mt-1">Comprehensive Diagnostic Test: Grammar, Listening, Writing & Speaking</p>
+        </div>
+
+        <div class="bg-blue-50/70 border border-blue-200 rounded-xl p-4 mb-6 text-sm text-slate-700 space-y-2">
+          <h3 class="font-bold text-blue-900 flex items-center gap-2">
+            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Assessment Modules & Structure
+          </h3>
+          <ul class="list-disc list-inside space-y-1 text-xs sm:text-sm text-slate-700">
+            <li><strong>Grammar & Vocabulary:</strong> 30 graduated questions with CBM certainty levels (A1 to C2).</li>
+            <li><strong>Listening Comprehension:</strong> 15 audio-based questions with integrated playback.</li>
+            <li><strong>Writing:</strong> 2 authentic tasks (A2-B1 Functional Email & B2-C2 Discursive Essay).</li>
+            <li><strong>Speaking:</strong> 3 direct microphone recording prompts (A1 to C2).</li>
+            <li><strong>Total Time:</strong> <span id="regExamDuration" class="font-bold text-blue-700">65 minutes</span>. Automatically submitted upon timer expiration.</li>
+          </ul>
+        </div>
+
+        <form id="registrationForm" class="space-y-4">
+          <div>
+            <label for="studentName" class="block text-sm font-semibold text-slate-800 mb-1">Candidate Full Name <span class="text-red-500">*</span></label>
+            <input type="text" id="studentName" required placeholder="e.g. Sarah Johnson" class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+          </div>
+          <div>
+            <label for="studentPhone" class="block text-sm font-semibold text-slate-800 mb-1">Phone / WhatsApp Number <span class="text-red-500">*</span></label>
+            <input type="tel" id="studentPhone" required placeholder="e.g. +20 100 123 4567" class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+          </div>
+          <div>
+            <label for="studentEmail" class="block text-sm font-semibold text-slate-800 mb-1">Email Address <span class="text-slate-400 font-normal">(Optional)</span></label>
+            <input type="email" id="studentEmail" placeholder="sarah@example.com" class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+          </div>
+          <div class="pt-3">
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl shadow-md transition flex items-center justify-center gap-2">
+              <span>Start Comprehensive Assessment</span>
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- 2. EXAM INTERFACE VIEW -->
+    <section id="viewExam" class="hidden space-y-4">
+      <!-- Top Control & Timer Strip -->
+      <div class="app-card bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+          </div>
+          <div>
+            <div id="examCandidateName" class="font-bold text-slate-900 text-sm sm:text-base leading-tight">Candidate Name</div>
+            <div id="progressText" class="text-xs text-slate-500 font-medium">Q&A: 0/45 | Writing: 0/2 | Speaking: 0/3</div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <div id="timerWrapper" class="timer-pill timer-normal">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span id="examTimer">65:00</span>
+          </div>
+
+          <button id="btnSubmitExam" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm px-4 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            <span>Finish & Submit</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Linear Progress Bar -->
+      <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+        <div id="examProgressBar" class="bg-blue-600 h-2 transition-all duration-300" style="width: 0%"></div>
+      </div>
+
+      <!-- 4-Skill Module Switcher Tabs -->
+      <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
+        <button class="module-tab-btn px-4 py-2 text-xs sm:text-sm font-bold rounded-xl bg-blue-600 text-white shadow-sm transition" data-module="grammar">
+          1. Grammar & Vocab (30Q)
+        </button>
+        <button class="module-tab-btn px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl text-slate-600 hover:bg-slate-100 transition" data-module="listening">
+          2. Listening (15Q)
+        </button>
+        <button class="module-tab-btn px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl text-slate-600 hover:bg-slate-100 transition" data-module="writing">
+          3. Writing (2 Tasks)
+        </button>
+        <button class="module-tab-btn px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl text-slate-600 hover:bg-slate-100 transition" data-module="speaking">
+          4. Speaking (3 Recordings)
+        </button>
+      </div>
+
+      <!-- PANEL 1: GRAMMAR & VOCABULARY -->
+      <div id="panelGrammar" class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <div class="lg:col-span-8 space-y-4">
+          <div class="app-card bg-white p-5 sm:p-7 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between min-h-[440px]">
+            <div>
+              <div class="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2">
+                  <span id="gCefrTag" class="text-xs font-bold px-2.5 py-1 bg-blue-50 text-blue-700 rounded-md">CEFR A1</span>
+                  <span id="gSkillTag" class="text-xs text-slate-500">Present Simple</span>
+                </div>
+                <span id="gIndexBadge" class="text-xs font-bold text-blue-700">Question 1 of 30</span>
+              </div>
+              <h2 id="gText" class="text-lg sm:text-xl font-bold text-slate-900 mb-6 leading-relaxed">Loading...</h2>
+              <div id="gOptionsContainer" class="space-y-3 mb-6"></div>
+            </div>
+
+            <!-- CBM Certainty -->
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-2">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-slate-700 uppercase tracking-wider">Confidence Level (CBM):</span>
+                <span class="text-[11px] text-slate-500">Sure = High conviction, Not sure = Educated guess</span>
+              </div>
+              <div class="certainty-group">
+                <button type="button" id="btnGSure" class="certainty-btn"><span>[ ✓ ] Sure</span></button>
+                <button type="button" id="btnGNotSure" class="certainty-btn"><span>[ ? ] Not sure</span></button>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-4 mt-3 border-t border-slate-100">
+              <button id="btnGPrev" class="px-4 py-2 text-sm font-semibold rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 transition disabled:opacity-40">← Previous</button>
+              <button id="btnGNext" class="px-5 py-2 text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition disabled:opacity-40">Next →</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="lg:col-span-4">
+          <div class="app-card bg-white p-4 rounded-2xl border border-slate-200 shadow-sm sticky top-20">
+            <h3 class="text-sm font-bold text-slate-800 mb-3">Grammar & Vocab Palette (30)</h3>
+            <div id="grammarPaletteGrid" class="palette-grid max-h-[350px] overflow-y-auto pr-1"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PANEL 2: LISTENING COMPREHENSION -->
+      <div id="panelListening" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <div class="lg:col-span-8 space-y-4">
+          <!-- Audio Player Bar -->
+          <div class="app-card bg-indigo-50 border border-indigo-200 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-sm">
+            <div>
+              <div id="lTrackTitle" class="text-sm font-bold text-indigo-900">Audio Track 1</div>
+              <div id="lTrackDesc" class="text-xs text-indigo-700">Description</div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="btnPlayAudio" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5">
+                ▶️ Play Audio Track
+              </button>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2" id="listeningTrackTabs"></div>
+
+          <!-- Question Card -->
+          <div class="app-card bg-white p-5 sm:p-7 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between min-h-[400px]">
+            <div>
+              <div class="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2">
+                  <span id="lCefrTag" class="text-xs font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-md">CEFR</span>
+                  <span id="lSkillTag" class="text-xs text-slate-500">Skill</span>
+                </div>
+                <span id="lIndexBadge" class="text-xs font-bold text-indigo-700">Question 31 of 45</span>
+              </div>
+              <h2 id="lText" class="text-lg sm:text-xl font-bold text-slate-900 mb-6 leading-relaxed">Loading...</h2>
+              <div id="lOptionsContainer" class="space-y-3 mb-6"></div>
+            </div>
+
+            <!-- CBM Certainty -->
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-2">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-slate-700 uppercase tracking-wider">Listening Confidence (CBM):</span>
+                <span class="text-[11px] text-slate-500">Did you clearly hear and understand?</span>
+              </div>
+              <div class="certainty-group">
+                <button type="button" id="btnLSure" class="certainty-btn"><span>[ ✓ ] Sure</span></button>
+                <button type="button" id="btnLNotSure" class="certainty-btn"><span>[ ? ] Not sure</span></button>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-4 mt-3 border-t border-slate-100">
+              <button id="btnLPrev" class="px-4 py-2 text-sm font-semibold rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 transition disabled:opacity-40">← Previous</button>
+              <button id="btnLNext" class="px-5 py-2 text-sm font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition disabled:opacity-40">Next →</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="lg:col-span-4">
+          <div class="app-card bg-white p-4 rounded-2xl border border-slate-200 shadow-sm sticky top-20">
+            <h3 class="text-sm font-bold text-slate-800 mb-3">Listening Palette (15)</h3>
+            <div id="listeningPaletteGrid" class="palette-grid max-h-[350px] overflow-y-auto pr-1"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PANEL 3: WRITING -->
+      <div id="panelWriting" class="hidden max-w-4xl mx-auto space-y-4">
+        <!-- Task 1 / Task 2 Selectors -->
+        <div class="flex items-center gap-3">
+          <button id="btnTask1" class="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 text-white shadow-sm transition">
+            Task 1: Email (A2-B1)
+          </button>
+          <button id="btnTask2" class="px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
+            Task 2: Academic Essay (B2-C2)
+          </button>
+        </div>
+
+        <div class="app-card bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <div class="border-b border-slate-200 pb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 id="wTaskTitle" class="text-lg font-bold text-slate-900">Task Title</h2>
+              <span id="wCefrTarget" class="text-xs font-bold text-blue-700">Target Level</span>
+            </div>
+            <span id="wWordLimitBadge" class="text-xs font-bold bg-blue-50 text-blue-800 px-3 py-1 rounded-full">Word limit</span>
+          </div>
+
+          <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 whitespace-pre-line leading-relaxed font-sans" id="wPromptText">
+            Prompt description...
+          </div>
+          <p id="wGuidanceText" class="text-xs text-slate-500 italic"></p>
+
+          <div>
+            <div class="flex items-center justify-between mb-1.5 text-xs font-semibold text-slate-700">
+              <span>Write your response below:</span>
+              <span id="writingWordCounter" class="text-blue-700 font-bold font-mono">0 Words</span>
+            </div>
+            <textarea id="writingTextarea" rows="12" placeholder="Start typing your response here..." class="w-full p-4 text-sm sm:text-base border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none leading-relaxed"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- PANEL 4: SPEAKING -->
+      <div id="panelSpeaking" class="hidden max-w-3xl mx-auto space-y-4">
+        <!-- Prompts Tabs -->
+        <div class="flex items-center gap-2" id="speakingPromptTabs"></div>
+
+        <div class="app-card bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm text-center space-y-6">
+          <div>
+            <span id="sCefrTarget" class="text-xs font-bold uppercase tracking-wider text-blue-700">Target: A1 - A2</span>
+            <h2 id="sPromptTitle" class="text-xl font-extrabold text-slate-900 mt-1">Speaking Part 1</h2>
+            <div id="sMaxTime" class="text-xs text-slate-500 mt-1">Max Duration: 45s</div>
+          </div>
+
+          <div id="sPromptText" class="p-5 bg-slate-50 border border-slate-200 rounded-2xl text-left text-sm sm:text-base text-slate-800 leading-relaxed whitespace-pre-line">
+            Speaking prompt text...
+          </div>
+
+          <!-- Recorder Control Area -->
+          <div class="py-4 space-y-4 flex flex-col items-center">
+            <button id="btnStartRecord" type="button" class="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-2xl shadow-lg transition flex items-center gap-2">
+              <span>🎤 Start Recording</span>
+            </button>
+            <div id="speakingStatusText" class="text-xs text-slate-500 font-semibold">Ready to record</div>
+            <audio id="speakingAudioPreview" controls class="hidden max-w-sm w-full mx-auto"></audio>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. STUDENT FINISHED SCREEN (STRICTLY NO SCORES) -->
+    <section id="viewFinished" class="hidden max-w-xl mx-auto py-10">
+      <div class="app-card bg-white p-8 rounded-2xl border border-slate-200 shadow-md text-center space-y-5">
+        <div class="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+          <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+        </div>
+        <div class="space-y-2">
+          <h2 class="text-2xl font-extrabold text-slate-900">Assessment Submitted Successfully!</h2>
+          <p class="text-slate-600 text-sm">
+            Thank you, <strong id="finCandidateName" class="text-slate-900">Student</strong>. Your answers, essays, and speaking audio tracks have been securely archived.
+          </p>
+        </div>
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs sm:text-sm text-slate-700 text-left space-y-2">
+          <p class="font-semibold text-slate-800">Placement Assessment Protocol:</p>
+          <p>
+            Your comprehensive 4-skills diagnostic evaluation is submitted directly to the Senior Academic Advisor.
+          </p>
+          <p>
+            You will be contacted at <span id="finCandidatePhone" class="font-bold text-blue-700">Phone</span> regarding your official CEFR & IELTS placement result.
+          </p>
+        </div>
+        <div class="pt-4">
+          <button id="btnReturnHome" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-6 rounded-xl text-sm transition">
+            Return to Main Screen
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. INSTRUCTOR DASHBOARD VIEW -->
+    <section id="viewAdmin" class="hidden space-y-6">
+      <div class="app-card bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <span class="inline-block bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-0.5 rounded uppercase mb-1">Administrative Control</span>
+          <h2 class="text-xl font-bold text-slate-900">Instructor Assessment Portal</h2>
+        </div>
+        <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-200">
+          <label for="examDurationSetting" class="text-xs font-bold text-slate-700">Exam Time (Mins):</label>
+          <input type="number" id="examDurationSetting" min="10" max="180" value="65" class="w-16 px-2 py-1 text-sm font-bold rounded border border-slate-300 text-center">
+          <button id="saveDurationBtn" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded transition">Save</button>
+        </div>
+        <button id="adminLogoutBtn" class="text-xs font-semibold text-red-600 hover:text-red-800 px-3 py-1.5 rounded border border-red-200 hover:bg-red-50 transition">
+          Exit Admin
+        </button>
+      </div>
+
+      <!-- Gemini AI API Configuration Card -->
+      <div class="app-card bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 p-5 rounded-2xl shadow-sm space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">🤖</span>
+            <h3 class="font-bold text-slate-900 text-sm">Google Gemini AI Engine Integration (Writing & Speaking)</h3>
+          </div>
+          <span class="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">Free Tier Supported</span>
+        </div>
+        <p class="text-xs text-slate-600">
+          Enter your free <strong>Gemini API Key</strong> below to activate instant automated CEFR evaluation for essays and speaking tasks. Your key is stored securely in your local browser storage.
+        </p>
+        <div class="flex flex-wrap items-center gap-2">
+          <input type="password" id="geminiApiKeyInput" placeholder="Paste your Gemini API Key here (e.g. AIzaSy...)" class="flex-1 min-w-[280px] px-3 py-2 text-xs font-mono rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none">
+          <button id="saveApiKeyBtn" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition shadow-sm">Save Key</button>
+          <button id="testApiKeyBtn" class="bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold px-3 py-2 rounded-lg transition">Test Connection</button>
+        </div>
+      </div>
+
+      <!-- KPI Cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="kpi-card"><div class="kpi-label">Total Candidates</div><div id="kpiTotalCandidates" class="kpi-value text-blue-600">0</div></div>
+        <div class="kpi-card"><div class="kpi-label">Avg Objective Score</div><div id="kpiAvgScore" class="kpi-value text-emerald-600">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">Avg Exam Duration</div><div id="kpiAvgTime" class="kpi-value text-slate-700">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">Target Standards</div><div class="kpi-value text-indigo-600">A1 - C2</div></div>
+      </div>
+
+      <!-- Submissions Table -->
+      <div class="app-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 sm:p-5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+          <h3 class="font-bold text-slate-900 text-base">Candidate Placement Records</h3>
+          <div class="flex items-center gap-2">
+            <button id="exportCsvBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition">Export CSV</button>
+            <button id="clearAllBtn" class="text-xs text-red-500 hover:text-red-700 px-3 py-1.5 rounded hover:bg-red-50 transition">Clear Data</button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase">
+                <th class="py-3 px-4">Candidate</th>
+                <th class="py-3 px-4">Phone</th>
+                <th class="py-3 px-4">Date</th>
+                <th class="py-3 px-4">Objective (/45)</th>
+                <th class="py-3 px-4">Estimated CEFR</th>
+                <th class="py-3 px-4">Status</th>
+                <th class="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="submissionsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Update Creds -->
+      <div class="app-card bg-white p-5 rounded-2xl border border-slate-200 shadow-sm max-w-xl">
+        <h3 class="font-bold text-slate-900 text-sm mb-3">Update Instructor Password</h3>
+        <form id="changeCredsForm" class="space-y-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">New Username</label>
+              <input type="text" id="newAdminUser" required placeholder="admin" class="w-full px-3 py-1.5 text-xs rounded border border-slate-300">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">New Password</label>
+              <input type="password" id="newAdminPass" required placeholder="••••••••" class="w-full px-3 py-1.5 text-xs rounded border border-slate-300">
+            </div>
+          </div>
+          <button type="submit" class="bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold px-4 py-2 rounded-lg transition">Update Credentials</button>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <!-- ADMIN LOGIN MODAL -->
+  <div id="adminLoginModal" class="modal-overlay hidden">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center gap-2 text-slate-900 font-bold">
+          <svg class="w-5 h-5 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          <span>Instructor Portal</span>
+        </div>
+        <button id="closeAdminLoginBtn" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+      <p class="text-xs text-slate-500">Default credentials: <code class="bg-slate-100 px-1 py-0.5 rounded text-blue-700 font-mono">admin / admin123</code></p>
+      <form id="adminLoginForm" class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Username</label>
+          <input type="text" id="adminUsernameInput" required class="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Password</label>
+          <input type="password" id="adminPasswordInput" required class="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none">
+        </div>
+        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg text-sm transition">Sign In</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- COMPREHENSIVE DIAGNOSTIC REPORT MODAL (PRINTABLE PDF) -->
+  <div id="reportModal" class="modal-overlay hidden">
+    <div class="modal-content p-6 sm:p-8 space-y-6">
+      <div class="no-print flex items-center justify-between border-b border-slate-200 pb-4">
+        <h3 class="text-lg font-bold text-slate-900">Candidate Diagnostic & CEFR Placement Report</h3>
+        <div class="flex items-center gap-2">
+          <button id="printReportBtn" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-2 rounded-lg shadow-sm transition">🖨️ Print / Save PDF</button>
+          <button id="downloadStudentCsvBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-2 rounded-lg shadow-sm transition">📥 Download CSV</button>
+          <button id="closeReportModalBtn" class="text-slate-400 hover:text-slate-600 text-xl px-2">✕</button>
+        </div>
+      </div>
+
+      <!-- Printable Header -->
+      <div class="print-header">
+        <div class="flex items-center justify-between border-b-2 border-slate-800 pb-3">
+          <div>
+            <h1 class="text-xl font-black text-slate-900">ENGLISH LANGUAGE DIAGNOSTIC EVALUATION</h1>
+            <p class="text-xs font-bold text-slate-600">CEFR 4-Skills Assessment with Certainty-Based Calibration (CBM)</p>
+          </div>
+          <div class="text-right text-xs font-bold text-blue-900" id="repDate">Date</div>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200 mt-4 text-xs">
+          <div><span class="text-slate-500 block">Candidate:</span><strong id="repName" class="text-slate-900 text-sm">Name</strong></div>
+          <div><span class="text-slate-500 block">Contact:</span><strong id="repPhone" class="text-slate-900 font-mono">Phone</strong></div>
+          <div><span class="text-slate-500 block">Email:</span><span id="repEmail" class="text-slate-700">Email</span></div>
+          <div><span class="text-slate-500 block">Total Duration:</span><strong id="repTotalTime" class="text-blue-700 font-mono">Time</strong></div>
+        </div>
+      </div>
+
+      <!-- Level & Score Banner -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="p-4 rounded-xl bg-blue-50 border border-blue-200 text-center">
+          <div class="text-xs font-bold text-blue-800 uppercase mb-1">Objective Q&A Score</div>
+          <div id="repRawScore" class="text-3xl font-extrabold text-blue-900">38 / 45</div>
+          <div class="text-xs text-blue-700">Grammar (30) + Listening (15)</div>
+        </div>
+        <div class="p-4 rounded-xl bg-indigo-50 border border-indigo-200 text-center">
+          <div class="text-xs font-bold text-indigo-800 uppercase mb-1">CBM Calibrated Score</div>
+          <div id="repCbmScore" class="text-3xl font-extrabold text-indigo-900">+64</div>
+          <div class="text-[11px] text-indigo-600">Certainty Weighted Calibration</div>
+        </div>
+        <div class="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-center">
+          <div class="text-xs font-bold text-emerald-800 uppercase mb-1">Official Level Placement</div>
+          <div id="repBand" class="text-xl font-extrabold text-emerald-900">CEFR B2 (Band 6.5)</div>
+          <div id="repLevelName" class="text-xs font-semibold text-emerald-700">Vantage Upper-Intermediate</div>
+        </div>
+      </div>
+
+      <div class="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900">
+        <strong>Recommended Course Pathway: </strong><span id="repRecommendation">Course recommendation</span>
+      </div>
+
+      <!-- CBM Matrix -->
+      <div>
+        <h4 class="text-sm font-bold text-slate-800 mb-2">CBM Certainty Profile (Grammar & Listening)</h4>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div class="cbm-quadrant cbm-mastery"><div class="font-bold text-sm">Solid Mastery</div><div class="text-[11px] text-emerald-700">Correct & Sure</div><div id="cbmMasteryCount" class="text-xl font-black">32</div></div>
+          <div class="cbm-quadrant cbm-lucky"><div class="font-bold text-sm">Lucky Guesses</div><div class="text-[11px] text-amber-700">Correct & Not Sure</div><div id="cbmLuckyCount" class="text-xl font-black">6</div></div>
+          <div class="cbm-quadrant cbm-misconception"><div class="font-bold text-sm">Misconceptions ⚠️</div><div class="text-[11px] text-red-700">Incorrect & Sure</div><div id="cbmMisconceptionCount" class="text-xl font-black">2</div></div>
+          <div class="cbm-quadrant cbm-gap"><div class="font-bold text-sm">Recognized Gaps</div><div class="text-[11px] text-slate-500">Incorrect & Not Sure</div><div id="cbmGapCount" class="text-xl font-black">5</div></div>
+        </div>
+      </div>
+
+      <!-- WRITING EVALUATION SECTION -->
+      <div class="border border-slate-200 rounded-2xl p-5 bg-slate-50 space-y-4">
+        <div class="flex items-center justify-between">
+          <h4 class="text-sm font-bold text-slate-800">Writing Tasks Diagnostic Evaluation</h4>
+          <button id="btnAiEvaluateWriting" class="no-print bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition">
+            🤖 Evaluate Writing with Gemini AI
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <div class="bg-white p-3.5 rounded-xl border border-slate-200">
+            <div class="font-bold text-slate-800 mb-1 flex justify-between">
+              <span>Task 1: Functional Email (A2-B1)</span>
+              <span id="repW1Count" class="text-slate-500 font-mono">0 Words</span>
+            </div>
+            <div id="repW1Text" class="p-2.5 bg-slate-50 rounded border border-slate-100 max-h-36 overflow-y-auto whitespace-pre-line text-slate-700 font-sans"></div>
+          </div>
+          <div class="bg-white p-3.5 rounded-xl border border-slate-200">
+            <div class="font-bold text-slate-800 mb-1 flex justify-between">
+              <span>Task 2: Discursive Essay (B2-C2)</span>
+              <span id="repW2Count" class="text-slate-500 font-mono">0 Words</span>
+            </div>
+            <div id="repW2Text" class="p-2.5 bg-slate-50 rounded border border-slate-100 max-h-36 overflow-y-auto whitespace-pre-line text-slate-700 font-sans"></div>
+          </div>
+        </div>
+
+        <!-- AI Diagnostic Box -->
+        <div id="repAiEvaluationBox" class="hidden bg-white p-4 rounded-xl border border-indigo-200 text-xs space-y-2">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+            <span class="font-bold text-indigo-900">Gemini AI Diagnostic Assessment</span>
+            <span id="aiCefrBadge" class="bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded">CEFR B2</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div><strong class="text-slate-700 block">Grammar Range & Accuracy:</strong><span id="aiGrammarNotes" class="text-slate-600"></span></div>
+            <div><strong class="text-slate-700 block">Lexical Resource:</strong><span id="aiLexicalNotes" class="text-slate-600"></span></div>
+            <div><strong class="text-slate-700 block">Coherence & Cohesion:</strong><span id="aiCoherenceNotes" class="text-slate-600"></span></div>
+          </div>
+          <div>
+            <strong class="text-slate-800 block">Key Language Weaknesses:</strong>
+            <ul id="aiWeaknessesList" class="list-none space-y-1 text-slate-600 mt-1"></ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- SPEAKING EVALUATION SECTION -->
+      <div class="border border-slate-200 rounded-2xl p-5 bg-slate-50 space-y-4">
+        <h4 class="text-sm font-bold text-slate-800">Speaking Audio Recordings</h4>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+          <div class="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2">
+            <div class="font-bold text-slate-800">Part 1: Personal Background</div>
+            <div id="repAudioDesc_S1" class="text-slate-500">Not recorded</div>
+            <audio id="repAudio_S1" controls class="w-full"></audio>
+          </div>
+          <div class="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2">
+            <div class="font-bold text-slate-800">Part 2: Narrative Experience</div>
+            <div id="repAudioDesc_S2" class="text-slate-500">Not recorded</div>
+            <audio id="repAudio_S2" controls class="w-full"></audio>
+          </div>
+          <div class="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2">
+            <div class="font-bold text-slate-800">Part 3: Critical Argumentation</div>
+            <div id="repAudioDesc_S3" class="text-slate-500">Not recorded</div>
+            <audio id="repAudio_S3" controls class="w-full"></audio>
+          </div>
+        </div>
+      </div>
+
+      <!-- TEACHER MANUAL OVERRIDE & GRADING RUBRIC -->
+      <div class="no-print border border-slate-200 rounded-2xl p-4 bg-white text-xs space-y-3">
+        <div class="flex items-center justify-between">
+          <h4 class="font-bold text-slate-800">Teacher Manual Grading & Notes Override</h4>
+          <button id="btnSaveManualGrade" class="bg-slate-800 hover:bg-slate-900 text-white font-bold px-3 py-1.5 rounded-lg transition">
+            Save Grade & Notes
+          </button>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Final CEFR Placement:</label>
+            <select id="teacherCefrSelect" class="w-full p-2 border border-slate-300 rounded font-bold">
+              <option value="A1">A1 - Breakthrough</option>
+              <option value="A2">A2 - Waystage</option>
+              <option value="B1">B1 - Threshold</option>
+              <option value="B2">B2 - Vantage</option>
+              <option value="C1">C1 - Effective Proficiency</option>
+              <option value="C2">C2 - Mastery</option>
+            </select>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block font-semibold text-slate-700 mb-1">Instructor Qualitative Feedback & Remarks:</label>
+            <input type="text" id="teacherNotesInput" placeholder="Add custom notes to appear on official report..." class="w-full p-2 border border-slate-300 rounded">
+          </div>
+        </div>
+      </div>
+
+      <!-- OBJECTIVE AUDIT TABLE -->
+      <div>
+        <h4 class="text-sm font-bold text-slate-800 mb-2">Question-by-Question Audit (Items 1 - 45)</h4>
+        <div class="overflow-x-auto max-h-[300px] overflow-y-auto border border-slate-200 rounded-xl">
+          <table class="w-full text-left border-collapse">
+            <thead class="bg-slate-100 text-[11px] font-bold text-slate-700 uppercase sticky top-0">
+              <tr>
+                <th class="py-2 px-3">#</th>
+                <th class="py-2 px-3">Level</th>
+                <th class="py-2 px-3">Skill / Focus</th>
+                <th class="py-2 px-3">Choice</th>
+                <th class="py-2 px-3">Key</th>
+                <th class="py-2 px-3">Certainty</th>
+                <th class="py-2 px-3">Status</th>
+                <th class="py-2 px-3">Time</th>
+              </tr>
+            </thead>
+            <tbody id="reportAuditTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="questions.js"></script>
+  <script src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(e => console.log('SW Note:', e));
+      });
+    }
+  </script>
+</body>
+</html>
