@@ -1,10 +1,93 @@
 // Comprehensive 4-Skills CEFR Assessment Engine with CBM & Gemini AI Integration
+// Features: Multi-Voice Listening, Auto-Progression, Backtracking Policy, IndexedDB, Google Sheets Cloud Sync
+
+// ---------------- IndexedDB Storage Engine (High Capacity) ----------------
+const IDBStorage = {
+  dbName: 'CEFR_Assessment_DB',
+  storeName: 'submissions',
+  version: 1,
+
+  async open() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(this.dbName, this.version);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(this.storeName)) {
+          db.createObjectStore(this.storeName, { keyPath: 'id' });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async save(sub) {
+    try {
+      const db = await this.open();
+      const tx = db.transaction(this.storeName, 'readwrite');
+      tx.objectStore(this.storeName).put(sub);
+      return new Promise((resolve) => {
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
+    } catch (e) {
+      console.warn('IDB save fallback', e);
+      return false;
+    }
+  },
+
+  async getAll() {
+    try {
+      const db = await this.open();
+      const tx = db.transaction(this.storeName, 'readonly');
+      const req = tx.objectStore(this.storeName).getAll();
+      return new Promise((resolve) => {
+        req.onsuccess = () => {
+          const list = (req.result || []).sort((a, b) => b.id.localeCompare(a.id));
+          resolve(list);
+        };
+        req.onerror = () => resolve([]);
+      });
+    } catch (e) {
+      return [];
+    }
+  },
+
+  async delete(id) {
+    try {
+      const db = await this.open();
+      const tx = db.transaction(this.storeName, 'readwrite');
+      tx.objectStore(this.storeName).delete(id);
+      return new Promise((resolve) => {
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
+    } catch (e) {
+      return false;
+    }
+  },
+
+  async clear() {
+    try {
+      const db = await this.open();
+      const tx = db.transaction(this.storeName, 'readwrite');
+      tx.objectStore(this.storeName).clear();
+      return new Promise((resolve) => {
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
+    } catch (e) {
+      return false;
+    }
+  }
+};
 
 // Global State
 let state = {
   currentView: 'register', // 'register', 'exam', 'finished', 'admin'
   candidate: null,
   examDurationMinutes: parseInt(localStorage.getItem('cefr_exam_duration')) || 65,
+  allowBacktracking: localStorage.getItem('cefr_allow_backtracking') !== 'false', // default true
   remainingSeconds: 65 * 60,
   timerInterval: null,
   activeModule: 'grammar', // 'grammar', 'listening', 'writing', 'speaking'
@@ -33,7 +116,8 @@ let state = {
   recordedAudioChunks: [],
   isRecording: false,
   recordingTimerInterval: null,
-  recordingSecondsElapsed: 0
+  recordingSecondsElapsed: 0,
+  cachedSubmissions: [] // In-memory cache for snappy admin UI
 };
 
 // Admin & API Configuration
@@ -59,37 +143,120 @@ function saveGeminiApiKey(key) {
   localStorage.setItem('cefr_gemini_api_key', key.trim());
 }
 
-// Submissions Storage
-function getSubmissions() {
+function getGoogleSheetsWebhook() {
+  return localStorage.getItem('cefr_google_sheets_webhook') || '';
+}
+
+function saveGoogleSheetsWebhook(url) {
+  localStorage.setItem('cefr_google_sheets_webhook', url.trim());
+}
+
+// Submissions Storage (IndexedDB with LocalStorage sync)
+async function loadSubmissionsList() {
+  const idbList = await IDBStorage.getAll();
+  if (idbList && idbList.length > 0) {
+    state.cachedSubmissions = idbList;
+    return idbList;
+  }
+  // Fallback to localStorage
   const saved = localStorage.getItem('cefr_submissions');
   if (saved) {
-    try { return JSON.parse(saved); } catch (e) { return []; }
+    try {
+      state.cachedSubmissions = JSON.parse(saved);
+      return state.cachedSubmissions;
+    } catch (e) {}
   }
+  state.cachedSubmissions = [];
   return [];
 }
 
-function saveSubmission(submission) {
-  const list = getSubmissions();
-  list.unshift(submission);
-  localStorage.setItem('cefr_submissions', JSON.stringify(list));
+async function saveSubmission(submission) {
+  // Save full copy to IndexedDB (no 5MB limit)
+  await IDBStorage.save(submission);
+
+  // Also update in-memory cache
+  state.cachedSubmissions.unshift(submission);
+
+  // Save lightweight version without large Base64 audio to localStorage to avoid quota errors
+  try {
+    const lightCopy = JSON.parse(JSON.stringify(submission));
+    if (lightCopy.speaking) {
+      if (lightCopy.speaking.S1) lightCopy.speaking.S1.audioDataUrl = null;
+      if (lightCopy.speaking.S2) lightCopy.speaking.S2.audioDataUrl = null;
+      if (lightCopy.speaking.S3) lightCopy.speaking.S3.audioDataUrl = null;
+    }
+    const currentList = JSON.parse(localStorage.getItem('cefr_submissions') || '[]');
+    currentList.unshift(lightCopy);
+    localStorage.setItem('cefr_submissions', JSON.stringify(currentList.slice(0, 50)));
+  } catch (err) {
+    console.warn('LocalStorage light sync skipped (quota managed)', err);
+  }
+
+  // Cloud Sync to Google Sheets if configured
+  await syncSubmissionToGoogleSheets(submission);
 }
 
-function updateSubmission(updatedSub) {
-  const list = getSubmissions().map(s => s.id === updatedSub.id ? updatedSub : s);
-  localStorage.setItem('cefr_submissions', JSON.stringify(list));
+async function updateSubmission(updatedSub) {
+  await IDBStorage.save(updatedSub);
+  state.cachedSubmissions = state.cachedSubmissions.map(s => s.id === updatedSub.id ? updatedSub : s);
 }
 
-function deleteSubmission(id) {
-  const list = getSubmissions().filter(s => s.id !== id);
-  localStorage.setItem('cefr_submissions', JSON.stringify(list));
+async function deleteSubmission(id) {
+  await IDBStorage.delete(id);
+  state.cachedSubmissions = state.cachedSubmissions.filter(s => s.id !== id);
+  const currentList = JSON.parse(localStorage.getItem('cefr_submissions') || '[]').filter(s => s.id !== id);
+  localStorage.setItem('cefr_submissions', JSON.stringify(currentList));
 }
 
-function clearAllSubmissions() {
+async function clearAllSubmissions() {
+  await IDBStorage.clear();
+  state.cachedSubmissions = [];
   localStorage.removeItem('cefr_submissions');
 }
 
-// Initialization
-document.addEventListener('DOMContentLoaded', () => {
+// Cloud Webhook Sync (Google Sheets)
+async function syncSubmissionToGoogleSheets(sub) {
+  const url = getGoogleSheetsWebhook();
+  if (!url || !url.startsWith('http')) return;
+
+  try {
+    const payload = {
+      id: sub.id,
+      candidateName: sub.candidate.name,
+      candidatePhone: sub.candidate.phone,
+      candidateEmail: sub.candidate.email,
+      date: sub.date,
+      totalDurationSeconds: sub.totalDurationSeconds,
+      grammarScore: sub.grammar.rawScore,
+      listeningScore: sub.listening.rawScore,
+      objectiveTotal: sub.grammar.rawScore + sub.listening.rawScore,
+      cefrLevel: sub.finalPlacement.cefr,
+      ieltsBand: sub.finalPlacement.ieltsBand,
+      cbmScore: sub.grammar.cbmScore + sub.listening.cbmScore,
+      cbmMastery: sub.cbmBreakdown.mastery,
+      cbmLucky: sub.cbmBreakdown.lucky,
+      cbmMisconceptions: sub.cbmBreakdown.misconception,
+      cbmGaps: sub.cbmBreakdown.gap,
+      writingTask1Words: sub.writing.W1.wordCount,
+      writingTask2Words: sub.writing.W2.wordCount,
+      writingTask1Text: sub.writing.W1.text,
+      writingTask2Text: sub.writing.W2.text
+    };
+
+    fetch(url, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(e => console.warn('Google Sheets sync note:', e));
+  } catch (err) {
+    console.warn('Google Sheets sync error:', err);
+  }
+}
+
+// App Initialization
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadSubmissionsList();
   initViews();
   setupEventListeners();
   setupAudioSynthesis();
@@ -101,6 +268,10 @@ function initViews() {
   state.examDurationMinutes = dur;
   const regDur = document.getElementById('regExamDuration');
   if (regDur) regDur.textContent = `${dur} minutes`;
+
+  state.allowBacktracking = (localStorage.getItem('cefr_allow_backtracking') !== 'false');
+  const navPolicySelect = document.getElementById('navigationPolicySetting');
+  if (navPolicySelect) navPolicySelect.value = state.allowBacktracking ? 'allow' : 'strict';
 }
 
 function showView(viewName) {
@@ -132,7 +303,17 @@ function setupEventListeners() {
   // Module Tabs in Exam View
   document.querySelectorAll('.module-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      switchModule(btn.dataset.module);
+      const targetMod = btn.dataset.module;
+      if (!state.allowBacktracking) {
+        const order = ['grammar', 'listening', 'writing', 'speaking'];
+        const currentIdx = order.indexOf(state.activeModule);
+        const targetIdx = order.indexOf(targetMod);
+        if (targetIdx < currentIdx) {
+          alert('Review of previous sections is disabled under strict forward-only exam policy.');
+          return;
+        }
+      }
+      switchModule(targetMod);
     });
   });
 
@@ -156,6 +337,8 @@ function setupEventListeners() {
 
   // Admin Settings
   document.getElementById('saveDurationBtn').addEventListener('click', handleSaveDuration);
+  document.getElementById('saveNavPolicyBtn').addEventListener('click', handleSaveNavPolicy);
+  document.getElementById('saveWebhookBtn').addEventListener('click', handleSaveWebhook);
   document.getElementById('saveApiKeyBtn').addEventListener('click', handleSaveApiKey);
   document.getElementById('testApiKeyBtn').addEventListener('click', handleTestApiKey);
   document.getElementById('changeCredsForm').addEventListener('submit', handleChangeCreds);
@@ -166,6 +349,12 @@ function setupEventListeners() {
 
   // Speaking Recording controls
   document.getElementById('btnStartRecord').addEventListener('click', toggleRecording);
+
+  // Audio Playback Stop Button
+  const stopAudioBtn = document.getElementById('btnStopAudio');
+  if (stopAudioBtn) {
+    stopAudioBtn.addEventListener('click', stopTrackAudio);
+  }
 }
 
 // Start Assessment
@@ -323,6 +512,8 @@ function accumulateTime() {
 function renderGrammarQuestion() {
   const q = CEFR_EXAM_DATA.grammarQuestions[state.currentQuestionIndex];
   const ans = state.grammarAnswers[q.id];
+  const totalQ = CEFR_EXAM_DATA.grammarQuestions.length;
+  const isLastQ = (state.currentQuestionIndex === totalQ - 1);
 
   document.getElementById('gIndexBadge').textContent = `Question ${q.id} of 30`;
   document.getElementById('gCefrTag').textContent = `CEFR Level ${q.cefr}`;
@@ -363,18 +554,40 @@ function renderGrammarQuestion() {
     renderGrammarPalette();
   };
 
-  // Nav buttons
-  document.getElementById('btnGPrev').disabled = (state.currentQuestionIndex === 0);
-  document.getElementById('btnGNext').disabled = (state.currentQuestionIndex === CEFR_EXAM_DATA.grammarQuestions.length - 1);
+  // Nav buttons & Backtracking Policy
+  const prevBtn = document.getElementById('btnGPrev');
+  const nextBtn = document.getElementById('btnGNext');
 
-  document.getElementById('btnGPrev').onclick = () => {
+  if (!state.allowBacktracking) {
+    prevBtn.classList.add('hidden');
+  } else {
+    prevBtn.classList.remove('hidden');
+    prevBtn.disabled = (state.currentQuestionIndex === 0);
+  }
+
+  if (isLastQ) {
+    nextBtn.textContent = "Proceed to Section 2 (Listening) →";
+    nextBtn.className = "px-5 py-2 text-sm font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition";
+  } else {
+    nextBtn.textContent = "Next →";
+    nextBtn.className = "px-5 py-2 text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition";
+  }
+
+  prevBtn.onclick = () => {
     accumulateTime();
     state.currentQuestionIndex--;
     renderGrammarQuestion();
     renderGrammarPalette();
   };
-  document.getElementById('btnGNext').onclick = () => {
+
+  nextBtn.onclick = () => {
     accumulateTime();
+    if (isLastQ) {
+      if (confirm("Great! You have completed Section 1 (Grammar & Vocabulary).\nProceed now to Section 2: Listening Comprehension?")) {
+        switchModule('listening');
+      }
+      return;
+    }
     state.currentQuestionIndex++;
     renderGrammarQuestion();
     renderGrammarPalette();
@@ -396,58 +609,146 @@ function renderGrammarPalette() {
     if (ans.option && ans.certainty) btn.classList.add('complete');
     else if (ans.option) btn.classList.add('partial');
 
-    btn.onclick = () => {
-      accumulateTime();
-      state.currentQuestionIndex = idx;
-      renderGrammarQuestion();
-      renderGrammarPalette();
-    };
+    // Strict forward-only locks past questions
+    if (!state.allowBacktracking && idx < state.currentQuestionIndex) {
+      btn.style.opacity = '0.5';
+      btn.style.cursor = 'not-allowed';
+      btn.title = 'Question locked under strict forward-only policy';
+    } else {
+      btn.onclick = () => {
+        accumulateTime();
+        state.currentQuestionIndex = idx;
+        renderGrammarQuestion();
+        renderGrammarPalette();
+      };
+    }
     grid.appendChild(btn);
   });
 }
 
-// ---------------- MODULE 2: LISTENING COMPREHENSION ----------------
+// ---------------- MODULE 2: LISTENING COMPREHENSION (MULTI-VOICE) ----------------
 
-let currentUtterance = null;
+let isAudioPlaying = false;
 
 function setupAudioSynthesis() {
-  // Check if browser speech synthesis is supported
-  if (!('speechSynthesis' in window)) {
-    console.warn('Speech synthesis not available.');
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.onvoiceschanged = () => {
+      // populate voices
+    };
   }
 }
 
-function playTrackAudio(text) {
+// Multi-Voice Natural Dialogue Player
+function playTrackAudioMultiVoice(transcript) {
   if (!('speechSynthesis' in window)) {
     alert('Audio synthesis is not supported on this browser.');
     return;
   }
-  window.speechSynthesis.cancel();
+  stopTrackAudio();
 
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'en-GB'; // British English for IELTS style
-  utterance.rate = 0.95;
+  const voices = window.speechSynthesis.getVoices();
+  const enVoices = voices.filter(v => v.lang.startsWith('en'));
+
+  // Distinct voices
+  const femaleVoice = enVoices.find(v => {
+    const n = v.name.toLowerCase();
+    return n.includes('female') || n.includes('zira') || n.includes('susan') || n.includes('hazel') || n.includes('victoria');
+  }) || enVoices[0];
+
+  const maleVoice = enVoices.find(v => {
+    const n = v.name.toLowerCase();
+    return n.includes('male') || n.includes('david') || n.includes('george') || n.includes('mark');
+  }) || enVoices[1] || enVoices[0];
+
+  const lines = transcript.split('\n').filter(l => l.trim().length > 0);
+  let lineIdx = 0;
+  isAudioPlaying = true;
 
   const playBtn = document.getElementById('btnPlayAudio');
-  if (playBtn) playBtn.innerHTML = '⏸️ Audio Playing...';
+  const stopBtn = document.getElementById('btnStopAudio');
+  const speakerIndicator = document.getElementById('activeSpeakerIndicator');
 
-  utterance.onend = () => {
-    if (playBtn) playBtn.innerHTML = '▶️ Replay Audio Track';
-  };
-  utterance.onerror = () => {
-    if (playBtn) playBtn.innerHTML = '▶️ Play Audio Track';
-  };
+  if (playBtn) playBtn.innerHTML = '🔊 Playing Dialogue...';
+  if (stopBtn) stopBtn.classList.remove('hidden');
 
-  currentUtterance = utterance;
-  window.speechSynthesis.speak(utterance);
+  function speakNextLine() {
+    if (!isAudioPlaying || lineIdx >= lines.length) {
+      stopTrackAudio();
+      return;
+    }
+
+    const rawLine = lines[lineIdx++];
+    let speakerName = "Narrator";
+    let textToSpeak = rawLine;
+    let isSpeakerTwo = false;
+
+    if (rawLine.startsWith('Receptionist:')) {
+      speakerName = "Receptionist (Oakwood Hall)";
+      textToSpeak = rawLine.replace('Receptionist:', '');
+      isSpeakerTwo = false;
+    } else if (rawLine.startsWith('Student:') || rawLine.startsWith('Emily:')) {
+      speakerName = "Emily Watson (Student)";
+      textToSpeak = rawLine.replace(/^[^:]+:/, '');
+      isSpeakerTwo = true;
+    } else if (rawLine.startsWith('Professor:') || rawLine.startsWith('Prof:')) {
+      speakerName = "Professor Evans (Academic Supervisor)";
+      textToSpeak = rawLine.replace(/^[^:]+:/, '');
+      isSpeakerTwo = false;
+    } else if (rawLine.startsWith('Julian:')) {
+      speakerName = "Julian (Master's Candidate)";
+      textToSpeak = rawLine.replace('Julian:', '');
+      isSpeakerTwo = true;
+    } else if (rawLine.includes('Distinguished colleagues')) {
+      speakerName = "Keynote Academic Lecturer";
+      textToSpeak = rawLine;
+      isSpeakerTwo = false;
+    }
+
+    if (speakerIndicator) {
+      speakerIndicator.textContent = `🔊 ${speakerName}`;
+      speakerIndicator.classList.remove('hidden');
+    }
+
+    const utter = new SpeechSynthesisUtterance(textToSpeak.trim());
+    utter.lang = 'en-GB';
+
+    if (isSpeakerTwo) {
+      if (femaleVoice && maleVoice && femaleVoice !== maleVoice) utter.voice = femaleVoice;
+      utter.pitch = 1.2;
+      utter.rate = 1.0;
+    } else {
+      if (maleVoice) utter.voice = maleVoice;
+      utter.pitch = 0.88;
+      utter.rate = 0.94;
+    }
+
+    utter.onend = () => {
+      if (isAudioPlaying) {
+        setTimeout(speakNextLine, 380); // Natural conversational pause
+      }
+    };
+    utter.onerror = () => {
+      if (isAudioPlaying) speakNextLine();
+    };
+
+    window.speechSynthesis.speak(utter);
+  }
+
+  speakNextLine();
 }
 
 function stopTrackAudio() {
+  isAudioPlaying = false;
   if ('speechSynthesis' in window) {
     window.speechSynthesis.cancel();
   }
   const playBtn = document.getElementById('btnPlayAudio');
-  if (playBtn) playBtn.innerHTML = '▶️ Play Audio Track';
+  const stopBtn = document.getElementById('btnStopAudio');
+  const speakerIndicator = document.getElementById('activeSpeakerIndicator');
+
+  if (playBtn) playBtn.innerHTML = '▶️ Play Dialogue (Multi-Voice)';
+  if (stopBtn) stopBtn.classList.add('hidden');
+  if (speakerIndicator) speakerIndicator.classList.add('hidden');
 }
 
 function renderListeningTrack() {
@@ -457,7 +758,7 @@ function renderListeningTrack() {
 
   const playBtn = document.getElementById('btnPlayAudio');
   playBtn.onclick = () => {
-    playTrackAudio(track.transcript);
+    playTrackAudioMultiVoice(track.transcript);
   };
 
   // Track Selector buttons
@@ -485,6 +786,9 @@ function renderListeningQuestion() {
   const track = CEFR_EXAM_DATA.listeningTracks[state.activeListeningTrack];
   const q = track.questions[state.currentQuestionIndex];
   const ans = state.listeningAnswers[q.id];
+
+  const isLastTrackQ = (state.currentQuestionIndex === track.questions.length - 1);
+  const isFinalOverallListening = (state.activeListeningTrack === CEFR_EXAM_DATA.listeningTracks.length - 1 && isLastTrackQ);
 
   document.getElementById('lIndexBadge').textContent = `Question ${q.id} of 45`;
   document.getElementById('lCefrTag').textContent = `CEFR ${q.cefr}`;
@@ -525,18 +829,53 @@ function renderListeningQuestion() {
     renderListeningPalette();
   };
 
-  // Nav
-  document.getElementById('btnLPrev').disabled = (state.currentQuestionIndex === 0);
-  document.getElementById('btnLNext').disabled = (state.currentQuestionIndex === track.questions.length - 1);
+  // Nav buttons & Backtracking Policy
+  const prevBtn = document.getElementById('btnLPrev');
+  const nextBtn = document.getElementById('btnLNext');
 
-  document.getElementById('btnLPrev').onclick = () => {
+  if (!state.allowBacktracking) {
+    prevBtn.classList.add('hidden');
+  } else {
+    prevBtn.classList.remove('hidden');
+    prevBtn.disabled = (state.currentQuestionIndex === 0);
+  }
+
+  if (isFinalOverallListening) {
+    nextBtn.textContent = "Proceed to Section 3 (Writing) →";
+    nextBtn.className = "px-5 py-2 text-sm font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition";
+  } else if (isLastTrackQ) {
+    nextBtn.textContent = `Proceed to Track ${state.activeListeningTrack + 2} →`;
+    nextBtn.className = "px-5 py-2 text-sm font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition";
+  } else {
+    nextBtn.textContent = "Next →";
+    nextBtn.className = "px-5 py-2 text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition";
+  }
+
+  prevBtn.onclick = () => {
     accumulateTime();
     state.currentQuestionIndex--;
     renderListeningQuestion();
     renderListeningPalette();
   };
-  document.getElementById('btnLNext').onclick = () => {
+
+  nextBtn.onclick = () => {
     accumulateTime();
+    if (isFinalOverallListening) {
+      if (confirm("You have finished Section 2 (Listening Comprehension).\nProceed now to Section 3: Writing Tasks?")) {
+        stopTrackAudio();
+        switchModule('writing');
+      }
+      return;
+    }
+    if (isLastTrackQ) {
+      stopTrackAudio();
+      state.activeListeningTrack++;
+      state.currentQuestionIndex = 0;
+      renderListeningTrack();
+      renderListeningQuestion();
+      renderListeningPalette();
+      return;
+    }
     state.currentQuestionIndex++;
     renderListeningQuestion();
     renderListeningPalette();
@@ -559,12 +898,19 @@ function renderListeningPalette() {
     if (ans.option && ans.certainty) btn.classList.add('complete');
     else if (ans.option) btn.classList.add('partial');
 
-    btn.onclick = () => {
-      accumulateTime();
-      state.currentQuestionIndex = idx;
-      renderListeningQuestion();
-      renderListeningPalette();
-    };
+    // Strict forward-only locks past questions
+    if (!state.allowBacktracking && idx < state.currentQuestionIndex) {
+      btn.style.opacity = '0.5';
+      btn.style.cursor = 'not-allowed';
+      btn.title = 'Question locked under strict forward-only policy';
+    } else {
+      btn.onclick = () => {
+        accumulateTime();
+        state.currentQuestionIndex = idx;
+        renderListeningQuestion();
+        renderListeningPalette();
+      };
+    }
     grid.appendChild(btn);
   });
 }
@@ -599,6 +945,10 @@ function renderWritingTask() {
   task2Btn.className = `px-4 py-2 rounded-xl text-xs font-bold transition ${state.activeWritingTask === 1 ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`;
 
   task1Btn.onclick = () => {
+    if (!state.allowBacktracking && state.activeWritingTask === 1) {
+      alert('Review of Task 1 is disabled under strict forward-only exam policy.');
+      return;
+    }
     accumulateTime();
     state.activeWritingTask = 0;
     renderWritingTask();
@@ -608,6 +958,40 @@ function renderWritingTask() {
     state.activeWritingTask = 1;
     renderWritingTask();
   };
+
+  // Navigation Buttons
+  const prevBtn = document.getElementById('btnWPrev');
+  const nextBtn = document.getElementById('btnWNext');
+
+  if (state.activeWritingTask === 0) {
+    prevBtn.classList.add('hidden');
+    nextBtn.textContent = "Proceed to Task 2 →";
+    nextBtn.className = "px-5 py-2 text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition";
+    nextBtn.onclick = () => {
+      accumulateTime();
+      state.activeWritingTask = 1;
+      renderWritingTask();
+    };
+  } else {
+    if (!state.allowBacktracking) {
+      prevBtn.classList.add('hidden');
+    } else {
+      prevBtn.classList.remove('hidden');
+      prevBtn.onclick = () => {
+        accumulateTime();
+        state.activeWritingTask = 0;
+        renderWritingTask();
+      };
+    }
+    nextBtn.textContent = "Proceed to Section 4 (Speaking) →";
+    nextBtn.className = "px-5 py-2 text-sm font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition";
+    nextBtn.onclick = () => {
+      accumulateTime();
+      if (confirm("You have finished Writing Task 2.\nProceed now to Section 4: Speaking Prompts?")) {
+        switchModule('speaking');
+      }
+    };
+  }
 }
 
 function updateWritingWordCount(text) {
@@ -640,6 +1024,10 @@ function renderSpeakingPrompt() {
     const hasAudio = !!state.speakingRecordings[pr.id].audioDataUrl;
     btn.innerHTML = `Part ${idx + 1} ${hasAudio ? '✓' : ''}`;
     btn.onclick = () => {
+      if (!state.allowBacktracking && idx < state.activeSpeakingPrompt) {
+        alert('Review of previous speaking recordings is disabled under strict policy.');
+        return;
+      }
       if (state.isRecording) stopRecording();
       state.activeSpeakingPrompt = idx;
       renderSpeakingPrompt();
@@ -664,8 +1052,44 @@ function renderSpeakingPrompt() {
   const recordBtn = document.getElementById('btnStartRecord');
   recordBtn.innerHTML = '🎤 Start Recording';
   recordBtn.className = 'bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-md transition flex items-center gap-2';
+
+  // Navigation Buttons
+  const prevBtn = document.getElementById('btnSPrev');
+  const nextBtn = document.getElementById('btnSNext');
+
+  if (state.activeSpeakingPrompt === 0) {
+    prevBtn.classList.add('hidden');
+  } else {
+    if (!state.allowBacktracking) {
+      prevBtn.classList.add('hidden');
+    } else {
+      prevBtn.classList.remove('hidden');
+      prevBtn.onclick = () => {
+        if (state.isRecording) stopRecording();
+        state.activeSpeakingPrompt--;
+        renderSpeakingPrompt();
+      };
+    }
+  }
+
+  if (state.activeSpeakingPrompt === CEFR_EXAM_DATA.speakingPrompts.length - 1) {
+    nextBtn.textContent = "Finish & Submit Assessment ✓";
+    nextBtn.className = "px-5 py-2 text-sm font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition";
+    nextBtn.onclick = () => {
+      promptSubmitExam();
+    };
+  } else {
+    nextBtn.textContent = `Proceed to Part ${state.activeSpeakingPrompt + 2} →`;
+    nextBtn.className = "px-5 py-2 text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition";
+    nextBtn.onclick = () => {
+      if (state.isRecording) stopRecording();
+      state.activeSpeakingPrompt++;
+      renderSpeakingPrompt();
+    };
+  }
 }
 
+// iOS Safari / Chrome / Edge Microphone Recording
 async function toggleRecording() {
   if (state.isRecording) {
     stopRecording();
@@ -677,16 +1101,32 @@ async function toggleRecording() {
 async function startRecording() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    state.mediaRecorder = new MediaRecorder(stream);
+
+    // Detect browser supported audio MIME type (supports iOS Safari audio/mp4)
+    let options = {};
+    if (typeof MediaRecorder.isTypeSupported === 'function') {
+      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+        options = { mimeType: 'audio/webm;codecs=opus' };
+      } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+        options = { mimeType: 'audio/webm' };
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        options = { mimeType: 'audio/mp4' };
+      } else if (MediaRecorder.isTypeSupported('audio/aac')) {
+        options = { mimeType: 'audio/aac' };
+      }
+    }
+
+    state.mediaRecorder = new MediaRecorder(stream, options);
     state.recordedAudioChunks = [];
     state.recordingSecondsElapsed = 0;
 
     state.mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) state.recordedAudioChunks.push(e.data);
+      if (e.data && e.data.size > 0) state.recordedAudioChunks.push(e.data);
     };
 
     state.mediaRecorder.onstop = () => {
-      const blob = new Blob(state.recordedAudioChunks, { type: 'audio/webm' });
+      const mime = state.mediaRecorder.mimeType || 'audio/webm';
+      const blob = new Blob(state.recordedAudioChunks, { type: mime });
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64data = reader.result;
@@ -782,7 +1222,7 @@ Are you ready to submit your full assessment?`;
   }
 }
 
-function finalizeExam(autoSubmitted = false) {
+async function finalizeExam(autoSubmitted = false) {
   clearInterval(state.timerInterval);
   accumulateTime();
   if (state.isRecording) stopRecording();
@@ -910,7 +1350,7 @@ function finalizeExam(autoSubmitted = false) {
     writing: {
       W1: { text: state.writingAnswers.W1.text, wordCount: state.writingAnswers.W1.wordCount, timeSpent: state.writingAnswers.W1.timeSpentSeconds },
       W2: { text: state.writingAnswers.W2.text, wordCount: state.writingAnswers.W2.wordCount, timeSpent: state.writingAnswers.W2.timeSpentSeconds },
-      aiEvaluation: null, // Populated via Gemini API
+      aiEvaluation: null,
       teacherScore: null,
       teacherNotes: ""
     },
@@ -925,10 +1365,11 @@ function finalizeExam(autoSubmitted = false) {
 
     // Overall CEFR Level estimation
     initialPlacement: placement,
-    finalPlacement: placement // Can be refined once writing/speaking are graded
+    finalPlacement: placement
   };
 
-  saveSubmission(submission);
+  // High capacity save
+  await saveSubmission(submission);
 
   // Show Student Thank You Screen (NO SCORES SHOWN)
   document.getElementById('finCandidateName').textContent = state.candidate.name;
@@ -936,11 +1377,8 @@ function finalizeExam(autoSubmitted = false) {
   showView('finished');
 }
 
-// ---------------- GEMINI AI EVALUATION ENGINE ----------------
-
 // ---------------- GEMINI AI AUTO-DETECTION & EVALUATION ENGINE ----------------
 
-// Helper to extract JSON from markdown or raw text
 function extractJsonFromText(rawText) {
   try {
     return JSON.parse(rawText);
@@ -953,9 +1391,7 @@ function extractJsonFromText(rawText) {
   }
 }
 
-// Dynamically discover which model works with this user's API Key
 async function detectWorkingGeminiModel(apiKey) {
-  // Strategy 1: Prioritize Google's recommended gemini-3.8-flash
   const probeCandidates = [
     { model: 'gemini-3.8-flash', endpoint: 'v1beta' },
     { model: 'gemini-2.0-flash', endpoint: 'v1beta' },
@@ -976,9 +1412,7 @@ async function detectWorkingGeminiModel(apiKey) {
       if (res.ok && data.candidates) {
         return c;
       }
-    } catch (e) {
-      // try next
-    }
+    } catch (e) {}
   }
 
   // Strategy 2: Probe listModels
@@ -1001,7 +1435,6 @@ async function detectWorkingGeminiModel(apiKey) {
     console.warn('ListModels query failed', err);
   }
 
-  // Default to gemini-3.8-flash
   return { model: 'gemini-3.8-flash', endpoint: 'v1beta' };
 }
 
@@ -1012,7 +1445,7 @@ async function evaluateWritingWithGemini(submissionId) {
     return;
   }
 
-  const submissions = getSubmissions();
+  const submissions = await loadSubmissionsList();
   const sub = submissions.find(s => s.id === submissionId);
   if (!sub) return;
 
@@ -1046,16 +1479,12 @@ Return your evaluation strictly in pure JSON format (without markdown backticks)
 `;
 
   try {
-    // Detect or load working model configuration
     let config = null;
     const savedConfig = localStorage.getItem('cefr_gemini_active_model');
     if (savedConfig) {
       try {
         const parsed = JSON.parse(savedConfig);
-        // Clear deprecated 2.5 or older models
-        if (!parsed.model.includes('2.5')) {
-          config = parsed;
-        }
+        if (!parsed.model.includes('2.5')) config = parsed;
       } catch (e) {}
     }
     if (!config) {
@@ -1067,14 +1496,11 @@ Return your evaluation strictly in pure JSON format (without markdown backticks)
     let response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: promptText }] }]
-      })
+      body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }] })
     });
 
     let data = await response.json();
 
-    // If model failed or was deprecated, auto-fallback to gemini-3.8-flash immediately
     if (data.error) {
       console.warn("Model response error, falling back to gemini-3.8-flash...", data.error);
       config = { model: 'gemini-3.8-flash', endpoint: 'v1beta' };
@@ -1092,7 +1518,7 @@ Return your evaluation strictly in pure JSON format (without markdown backticks)
       const rawOutput = data.candidates[0].content.parts[0].text;
       const resultJson = extractJsonFromText(rawOutput);
       sub.writing.aiEvaluation = resultJson;
-      updateSubmission(sub);
+      await updateSubmission(sub);
       alert('✓ AI Writing Evaluation completed successfully!');
       openStudentReport(submissionId);
     } else {
@@ -1103,6 +1529,140 @@ Return your evaluation strictly in pure JSON format (without markdown backticks)
     alert('Gemini API Evaluation Error: ' + err.message);
   } finally {
     if (btn) btn.innerHTML = '🤖 Evaluate Writing with Gemini AI';
+  }
+}
+
+// Helper to extract base64 data and mimeType from DataURL
+function parseDataUrl(dataUrl) {
+  if (!dataUrl) return null;
+  const matches = dataUrl.match(/^data:([A-Za-z0-9\-+\/]+);base64,(.+)$/);
+  if (matches && matches.length === 3) {
+    let mime = matches[1];
+    if (mime.includes('webm')) mime = 'audio/webm';
+    return { mimeType: mime, data: matches[2] };
+  }
+  return null;
+}
+
+// Multimodal AI Speaking Evaluation
+async function evaluateSpeakingWithGemini(submissionId) {
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    alert('Please enter and save your Gemini API Key in the settings section below first.');
+    return;
+  }
+
+  const submissions = await loadSubmissionsList();
+  const sub = submissions.find(s => s.id === submissionId);
+  if (!sub) return;
+
+  const hasAudio = (sub.speaking.S1 && sub.speaking.S1.audioDataUrl) ||
+                   (sub.speaking.S2 && sub.speaking.S2.audioDataUrl) ||
+                   (sub.speaking.S3 && sub.speaking.S3.audioDataUrl);
+
+  if (!hasAudio) {
+    alert('No spoken audio recordings found for this candidate.');
+    return;
+  }
+
+  const btn = document.getElementById('btnAiEvaluateSpeaking');
+  if (btn) btn.innerHTML = '⏳ Listening & Evaluating Spoken Audio with Gemini AI...';
+
+  const parts = [];
+
+  ['S1', 'S2', 'S3'].forEach((pId, idx) => {
+    const rec = sub.speaking[pId];
+    if (rec && rec.audioDataUrl) {
+      const parsed = parseDataUrl(rec.audioDataUrl);
+      if (parsed) {
+        parts.push({ text: `--- STUDENT SPOKEN RECORDING PART ${idx + 1} (${CEFR_EXAM_DATA.speakingPrompts[idx].title}) ---` });
+        parts.push({
+          inlineData: {
+            mimeType: parsed.mimeType,
+            data: parsed.data
+          }
+        });
+      }
+    }
+  });
+
+  parts.push({
+    text: `
+You are an expert Cambridge and IELTS Senior Speaking Examiner.
+Listen carefully to the student's spoken audio recording(s) attached above and perform a comprehensive oral proficiency assessment according to official CEFR criteria (A1, A2, B1, B2, C1, C2) and IELTS Speaking criteria.
+
+Assess the student across all four foundational dimensions:
+1. Fluency & Coherence: Speech rate, natural pauses, hesitation, hesitation length, linking words.
+2. Pronunciation & Phonetics: Clarity, word stress, vowel/consonant accuracy, rhythm, intelligibility.
+3. Lexical Resource: Range of spoken vocabulary, idioms, precision, avoidance of generic filler words.
+4. Grammatical Range & Accuracy: Spoken grammatical structures, tense consistency, syntax errors.
+
+Return your evaluation strictly in pure JSON format (without markdown backticks) with this structure:
+{
+  "cefrLevel": "B2",
+  "ieltsBandEquivalent": "6.5",
+  "fluencyNotes": "Detailed evaluation of speech flow, pacing, and coherence",
+  "pronunciationNotes": "Detailed evaluation of phonetics, clarity, and accent intelligibility",
+  "lexicalNotes": "Evaluation of spoken vocabulary richness and register",
+  "grammarNotes": "Evaluation of spoken syntax, grammatical range, and accuracy",
+  "overallSummary": "A concise professional summary of the candidate's oral performance",
+  "keyWeaknesses": ["Specific oral weakness 1", "Specific oral weakness 2", "Specific oral weakness 3"],
+  "keyStrengths": ["Key speaking strength 1", "Key speaking strength 2"]
+}
+`
+  });
+
+  try {
+    let config = null;
+    const savedConfig = localStorage.getItem('cefr_gemini_active_model');
+    if (savedConfig) {
+      try {
+        const parsed = JSON.parse(savedConfig);
+        if (!parsed.model.includes('2.5')) config = parsed;
+      } catch (e) {}
+    }
+    if (!config) {
+      config = await detectWorkingGeminiModel(apiKey);
+      localStorage.setItem('cefr_gemini_active_model', JSON.stringify(config));
+    }
+
+    let url = `https://generativelanguage.googleapis.com/${config.endpoint}/models/${config.model}:generateContent?key=${apiKey}`;
+    let response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts }] })
+    });
+
+    let data = await response.json();
+
+    if (data.error) {
+      console.warn("Model error on audio, retrying with gemini-3.8-flash...", data.error);
+      config = { model: 'gemini-3.8-flash', endpoint: 'v1beta' };
+      localStorage.setItem('cefr_gemini_active_model', JSON.stringify(config));
+      url = `https://generativelanguage.googleapis.com/${config.endpoint}/models/${config.model}:generateContent?key=${apiKey}`;
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts }] })
+      });
+      data = await response.json();
+    }
+
+    if (data.candidates && data.candidates[0].content.parts[0].text) {
+      const rawOutput = data.candidates[0].content.parts[0].text;
+      const resultJson = extractJsonFromText(rawOutput);
+      sub.speaking.aiEvaluation = resultJson;
+      await updateSubmission(sub);
+      alert('✓ AI Spoken Audio Evaluation completed successfully!');
+      openStudentReport(submissionId);
+    } else {
+      throw new Error(data.error?.message || 'Empty response from Gemini API for audio analysis');
+    }
+  } catch (err) {
+    console.error('Gemini Speaking API Error:', err);
+    alert('Gemini Speaking Evaluation Error: ' + err.message);
+  } finally {
+    if (btn) btn.innerHTML = '🤖 Evaluate Speaking with Gemini AI';
   }
 }
 
@@ -1135,10 +1695,23 @@ function handleSaveDuration() {
   initViews();
 }
 
+function handleSaveNavPolicy() {
+  const select = document.getElementById('navigationPolicySetting');
+  const allow = (select.value === 'allow');
+  localStorage.setItem('cefr_allow_backtracking', allow);
+  state.allowBacktracking = allow;
+  alert(`Navigation policy updated: ${allow ? 'Review & Backtracking Allowed' : 'Strict Forward-Only Progression Enforced'}.`);
+}
+
+function handleSaveWebhook() {
+  const url = document.getElementById('googleSheetsWebhookInput').value.trim();
+  saveGoogleSheetsWebhook(url);
+  alert('Google Sheets Webhook URL saved successfully! Student submissions will automatically sync to your sheet in real time.');
+}
+
 function handleSaveApiKey() {
   const key = document.getElementById('geminiApiKeyInput').value.trim();
   saveGeminiApiKey(key);
-  // Reset cached model to force auto-detection on new key
   localStorage.removeItem('cefr_gemini_active_model');
   alert('Gemini API Key successfully saved securely on your device.');
 }
@@ -1173,14 +1746,20 @@ function handleChangeCreds(e) {
   document.getElementById('changeCredsForm').reset();
 }
 
-function renderAdminDashboard() {
+async function renderAdminDashboard() {
   const keyInput = document.getElementById('geminiApiKeyInput');
   if (keyInput) keyInput.value = getGeminiApiKey();
+
+  const webhookInput = document.getElementById('googleSheetsWebhookInput');
+  if (webhookInput) webhookInput.value = getGoogleSheetsWebhook();
 
   const durInput = document.getElementById('examDurationSetting');
   if (durInput) durInput.value = state.examDurationMinutes;
 
-  const submissions = getSubmissions();
+  const navSelect = document.getElementById('navigationPolicySetting');
+  if (navSelect) navSelect.value = state.allowBacktracking ? 'allow' : 'strict';
+
+  const submissions = await loadSubmissionsList();
   document.getElementById('kpiTotalCandidates').textContent = submissions.length;
 
   if (submissions.length > 0) {
@@ -1203,7 +1782,7 @@ function renderAdminDashboard() {
     tr.className = 'hover:bg-slate-50 border-b border-slate-100 text-sm transition';
     const totalObj = sub.grammar.rawScore + sub.listening.rawScore;
     const writingStatus = sub.writing.aiEvaluation ? '✓ Evaluated (AI)' : (sub.writing.W2.wordCount > 30 ? 'Submitted' : 'Blank');
-    const speakingStatus = sub.speaking.S1.audioDataUrl ? '✓ 3 Recordings' : 'None';
+    const speakingStatus = sub.speaking.aiEvaluation ? '✓ Evaluated (AI)' : (sub.speaking.S1.audioDataUrl ? '✓ 3 Recordings' : 'None');
 
     tr.innerHTML = `
       <td class="py-3 px-4 font-bold text-slate-900">${escapeHtml(sub.candidate.name)}</td>
@@ -1233,25 +1812,25 @@ function renderAdminDashboard() {
     b.onclick = () => openStudentReport(b.dataset.id);
   });
   tbody.querySelectorAll('.btn-del-sub').forEach(b => {
-    b.onclick = () => {
+    b.onclick = async () => {
       if (confirm('Delete this candidate record?')) {
-        deleteSubmission(b.dataset.id);
+        await deleteSubmission(b.dataset.id);
         renderAdminDashboard();
       }
     };
   });
 }
 
-function handleClearAll() {
+async function handleClearAll() {
   if (confirm('Permanently clear all candidate records?')) {
-    clearAllSubmissions();
+    await clearAllSubmissions();
     renderAdminDashboard();
   }
 }
 
 // Open Diagnostic Student Modal
-function openStudentReport(submissionId) {
-  const submissions = getSubmissions();
+async function openStudentReport(submissionId) {
+  const submissions = await loadSubmissionsList();
   const sub = submissions.find(s => s.id === submissionId);
   if (!sub) return;
 
@@ -1286,7 +1865,7 @@ function openStudentReport(submissionId) {
   document.getElementById('repW2Text').innerText = sub.writing.W2.text || '(No text submitted)';
   document.getElementById('repW2Count').textContent = `${sub.writing.W2.wordCount} Words (${formatSeconds(sub.writing.W2.timeSpent)})`;
 
-  // AI Evaluation Display
+  // AI Writing Evaluation Display
   const aiBox = document.getElementById('repAiEvaluationBox');
   if (sub.writing.aiEvaluation) {
     aiBox.classList.remove('hidden');
@@ -1295,12 +1874,12 @@ function openStudentReport(submissionId) {
     document.getElementById('aiGrammarNotes').textContent = ai.grammarAccuracy;
     document.getElementById('aiLexicalNotes').textContent = ai.lexicalResource;
     document.getElementById('aiCoherenceNotes').textContent = ai.coherenceCohesion;
-    document.getElementById('aiWeaknessesList').innerHTML = ai.keyWeaknesses.map(w => `<li>• ${escapeHtml(w)}</li>`).join('');
+    document.getElementById('aiWeaknessesList').innerHTML = (ai.keyWeaknesses || []).map(w => `<li>• ${escapeHtml(w)}</li>`).join('');
   } else {
     aiBox.classList.add('hidden');
   }
 
-  // AI Evaluate Button
+  // AI Evaluate Writing Button
   document.getElementById('btnAiEvaluateWriting').onclick = () => {
     evaluateWritingWithGemini(sub.id);
   };
@@ -1319,17 +1898,38 @@ function openStudentReport(submissionId) {
     }
   });
 
+  // AI Speaking Evaluation Display
+  const speakingAiBox = document.getElementById('repAiSpeakingBox');
+  if (sub.speaking.aiEvaluation) {
+    speakingAiBox.classList.remove('hidden');
+    const aiSpk = sub.speaking.aiEvaluation;
+    document.getElementById('aiSpeakingCefrBadge').textContent = `AI Spoken Level: CEFR ${aiSpk.cefrLevel} (Band ${aiSpk.ieltsBandEquivalent})`;
+    document.getElementById('aiFluencyNotes').textContent = aiSpk.fluencyNotes || '';
+    document.getElementById('aiPronunciationNotes').textContent = aiSpk.pronunciationNotes || '';
+    document.getElementById('aiSpeakingLexicalNotes').textContent = aiSpk.lexicalNotes || '';
+    document.getElementById('aiSpeakingGrammarNotes').textContent = aiSpk.grammarNotes || '';
+    document.getElementById('aiSpeakingSummary').textContent = aiSpk.overallSummary || '';
+    document.getElementById('aiSpeakingWeaknessesList').innerHTML = (aiSpk.keyWeaknesses || []).map(w => `<li>• ${escapeHtml(w)}</li>`).join('');
+  } else {
+    speakingAiBox.classList.add('hidden');
+  }
+
+  // AI Evaluate Speaking Button
+  document.getElementById('btnAiEvaluateSpeaking').onclick = () => {
+    evaluateSpeakingWithGemini(sub.id);
+  };
+
   // Manual Rubric Controls
   const teacherCefrSelect = document.getElementById('teacherCefrSelect');
   teacherCefrSelect.value = sub.finalPlacement.cefr;
   document.getElementById('teacherNotesInput').value = sub.writing.teacherNotes || '';
 
-  document.getElementById('btnSaveManualGrade').onclick = () => {
+  document.getElementById('btnSaveManualGrade').onclick = async () => {
     const chosenCefr = teacherCefrSelect.value;
     const notes = document.getElementById('teacherNotesInput').value;
     sub.finalPlacement.cefr = chosenCefr;
     sub.writing.teacherNotes = notes;
-    updateSubmission(sub);
+    await updateSubmission(sub);
     alert('Evaluation saved successfully!');
     openStudentReport(sub.id);
   };
@@ -1362,8 +1962,8 @@ function openStudentReport(submissionId) {
 }
 
 // Export CSVs
-function exportAllToCsv() {
-  const submissions = getSubmissions();
+async function exportAllToCsv() {
+  const submissions = await loadSubmissionsList();
   if (submissions.length === 0) return alert('No records to export.');
 
   let csv = 'ID,Name,Phone,Date,Duration(s),Grammar(/30),Listening(/15),TotalObj(/45),CEFR,IELTS Band,CBM Mastery,CBM Lucky,CBM Misconceptions,CBM Gaps\n';
